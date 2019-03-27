@@ -4,19 +4,29 @@ using UnityEngine;
 
 public class RocketMovement : MonoBehaviour
 {
-    public bool debugText = true;
-    public float speed = 10f;
-    public float maxTimer = 5f;
+    public bool debugText = true;   //Mostrar o texto no console ao lançar
 
-    public Vector3 cameraOffset;
+    [Header("Rocket Config")]
+    [Tooltip("Speed of the rocket.")]
+    public float speed = 1000f;
+    [Tooltip("Time in seconds to deplet fuel in each stage.")]
+    public float timerMax = 5f;
 
+    [Header("Parachute Config")]
+    public GameObject parachute;
+    [Tooltip("How much air resistance the parachute will provide ?")]
+    public float dragCoef = 10f;
+
+    [Header("Modules Config")]
     public GameObject firstStage;
+    public GameObject secondStage;
 
     private float maxHeight;
     private Rigidbody _rgdbdy;  //Caching no componente para melhor performance.
 
+    [Header("Private Vars")]
     [SerializeField]
-    private float currentTimer = 0f;
+    private float timerCurrent = 0f;
 
     void Awake()
     {
@@ -26,62 +36,76 @@ public class RocketMovement : MonoBehaviour
 
     void Start()
     {
-        StartCoroutine("LauchingSequence");
+        StartCoroutine(LauchSequence());
     }
 
-    void Update()
+    void FixedUpdate()
     {
-        Camera.main.transform.position = transform.position + cameraOffset;
-        DetectHeight();
-        switch (StateManager.currentState)
+        switch (StateManager.GetState())
         {
             case StateManager.gameState.START:
-                StartCoroutine("Thrust");
+                StartCoroutine(Thrust(StateManager.gameState.STAGE1));
                 break;
 
-            case StateManager.gameState.STAGE1:
+            case StateManager.gameState.SEPARATING1:
+                SeparateModule(firstStage);
                 break;
 
-            case StateManager.gameState.SEPARATING:
-                StartCoroutine("SeparateModules");
+            case StateManager.gameState.SEPARATING2:
+                SeparateModule(secondStage);
                 break;
 
-            case StateManager.gameState.STAGE2:
+            case StateManager.gameState.PARACHUTE:
+                OpenParachute();
                 break;
         }
     }
-
-    IEnumerator Thrust()
+    void Update()
     {
-        StateManager.currentState = StateManager.gameState.STAGE1;
+        DetectHeight();
+    }
+
+    IEnumerator Thrust(StateManager.gameState state)
+    {
+        StateManager.SetState(state);
+
         _rgdbdy.useGravity = true;
 
-        while (currentTimer < maxTimer)
+        while (timerCurrent < timerMax)
         {
-            _rgdbdy.AddForce(new Vector3(0, speed, 0));
-            speed += speed / 1000;
-            currentTimer += Time.deltaTime;
+            _rgdbdy.AddForce(new Vector3(0, speed * Time.deltaTime, 0));
+            //speed += speed / 1000;
+            timerCurrent += Time.deltaTime;
             yield return null;
         }
+        timerCurrent = 0;
 
-        StateManager.currentState = StateManager.gameState.SEPARATING;
+        StateManager.NextState(state);
     }
 
-    IEnumerator SeparateModules()
+    private void SeparateModule(GameObject module)
     {
-        StateManager.currentState = StateManager.gameState.STAGE2;
-
         Debug.Log("Iniciating separating sequence.");
-        firstStage.transform.parent = null;
-        firstStage.AddComponent<Rigidbody>();
-        Rigidbody firstStage_rgdbdy = firstStage.GetComponent<Rigidbody>();
-        firstStage_rgdbdy.velocity = _rgdbdy.velocity * 0.99f;
-        yield return new WaitForSeconds(0.3f);
-        Debug.Log("Separation sequence completed.");
-        yield return null;
+        module.transform.parent = null;
+        module.AddComponent<Rigidbody>();
+        Rigidbody module_rgdbdy = module.GetComponent<Rigidbody>();
+        module_rgdbdy.velocity = _rgdbdy.velocity * 0.95f + new Vector3(Random.Range(-2, 2), Random.Range(-2, 0), Random.Range(-2, 2));
+        module_rgdbdy.drag = _rgdbdy.drag;
+        module_rgdbdy.mass = _rgdbdy.mass / 3;
+        _rgdbdy.mass /= 3;
+
+        StateManager.NextState();
+
+        if (module == firstStage)
+        {
+            StartCoroutine(Thrust(StateManager.gameState.STAGE2));
+            Debug.Log("Separation sequence 1 completed.");
+        }
+        else
+            Debug.Log("Separation sequence 2 completed.");
     }
 
-    IEnumerator LauchingSequence()
+    IEnumerator LauchSequence()
     {
         if (debugText)
         {
@@ -99,7 +123,9 @@ public class RocketMovement : MonoBehaviour
             yield return new WaitForSeconds(1);
             Debug.Log("Now.");
         }
-        StateManager.currentState = StateManager.gameState.START;
+
+        StateManager.SetState(StateManager.gameState.START);
+
         yield return null;
     }
 
@@ -110,5 +136,14 @@ public class RocketMovement : MonoBehaviour
             maxHeight = _rgdbdy.position.y;
             Debug.Log("Maximum height detected: " + maxHeight);
         }
+    }
+
+    private void OpenParachute()
+    {
+        parachute.gameObject.SetActive(true);
+        _rgdbdy.drag = dragCoef;
+
+        StateManager.SetState(StateManager.gameState.LANDING);
+
     }
 }

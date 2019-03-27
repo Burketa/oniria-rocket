@@ -56,7 +56,8 @@ public class RocketMovement : MonoBehaviour
                 break;
 
             case StateManager.gameState.PARACHUTE:
-                OpenParachute();
+                if (_rgdbdy.velocity.y < 0)
+                    OpenParachute();
                 break;
         }
     }
@@ -87,12 +88,12 @@ public class RocketMovement : MonoBehaviour
     {
         Debug.Log("Iniciating separating sequence.");
         module.transform.parent = null;
-        module.AddComponent<Rigidbody>();
-        Rigidbody module_rgdbdy = module.GetComponent<Rigidbody>();
+        Rigidbody module_rgdbdy = module.AddComponent<Rigidbody>();
+        //Rigidbody module_rgdbdy = module.GetComponent<Rigidbody>();
         module_rgdbdy.velocity = _rgdbdy.velocity * 0.95f + new Vector3(Random.Range(-2, 2), Random.Range(-2, 0), Random.Range(-2, 2));
         module_rgdbdy.drag = _rgdbdy.drag;
-        module_rgdbdy.mass = _rgdbdy.mass / 3;
-        _rgdbdy.mass /= 3;
+        //module_rgdbdy.mass = _rgdbdy.mass / 3;
+        //_rgdbdy.mass /= 3;
 
         StateManager.NextState();
 
@@ -131,6 +132,9 @@ public class RocketMovement : MonoBehaviour
 
     private void DetectHeight()
     {
+        if (_rgdbdy.position.y > maxHeight)
+            maxHeight = _rgdbdy.position.y;
+
         if ((_rgdbdy.velocity.y <= 0) && (_rgdbdy.position.y > maxHeight))
         {
             maxHeight = _rgdbdy.position.y;
@@ -138,12 +142,22 @@ public class RocketMovement : MonoBehaviour
         }
     }
 
+    //TODO: Abrir o paraquedas apenas quando estiver caindo
     private void OpenParachute()
     {
         parachute.gameObject.SetActive(true);
-        _rgdbdy.drag = dragCoef;
+        Invoke("AdjustDrag", 2.0f);
 
         StateManager.SetState(StateManager.gameState.LANDING);
+    }
 
+    private void AdjustDrag()
+    {
+        _rgdbdy.drag = dragCoef;
+    }
+
+    public float GetMaxHeight()
+    {
+        return maxHeight;
     }
 }

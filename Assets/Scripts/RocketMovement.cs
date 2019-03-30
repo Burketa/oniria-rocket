@@ -22,7 +22,8 @@ public class RocketMovement : MonoBehaviour
     public GameObject secondStage;
 
     private float maxHeight;
-    private Rigidbody _rgdbdy;  //Caching no componente para melhor performance.
+    private Rigidbody _rgdbdy;  //Caching nos componentes para melhor performance.
+    private ParticleSystem _particle;
 
     [Header("Private Vars")]
     [SerializeField]
@@ -31,7 +32,8 @@ public class RocketMovement : MonoBehaviour
     void Awake()
     {
         _rgdbdy = GetComponent<Rigidbody>();
-        maxHeight = transform.position.y + 1;  //Uma folga para não acusar a altura maxima no inicio do lançamento.
+        maxHeight = transform.position.y;
+        _particle = GetComponentInChildren<ParticleSystem>();
     }
 
     void Start()
@@ -70,16 +72,32 @@ public class RocketMovement : MonoBehaviour
     {
         StateManager.SetState(state);
 
-        _rgdbdy.useGravity = true;
+        //Controle das particulas
+        switch (state)
+        {
+            case StateManager.gameState.STAGE1:
+                _rgdbdy.useGravity = true;
+                ParticleManager.EmmitParticle(_particle, true);
+                break;
 
+            case StateManager.gameState.STAGE2:
+                ParticleManager.MoveParticle(_particle, secondStage.transform.position);
+                ParticleManager.EmmitParticle(_particle, true);
+                break;
+        }
+
+        //Controle do "combustivel"
         while (timerCurrent < timerMax)
         {
-            _rgdbdy.AddForce(new Vector3(0, speed * Time.deltaTime, 0));
+            _rgdbdy.AddForce(transform.up * speed * Time.deltaTime);
             //speed += speed / 1000;
             timerCurrent += Time.deltaTime;
             yield return null;
         }
+
         timerCurrent = 0;
+
+        ParticleManager.EmmitParticle(_particle, false);
 
         StateManager.NextState(state);
     }
@@ -103,7 +121,11 @@ public class RocketMovement : MonoBehaviour
             Debug.Log("Separation sequence 1 completed.");
         }
         else
+        {
+            Cinemachine.CinemachineVirtualCamera cameraFX = GameObject.FindObjectOfType<Cinemachine.CinemachineVirtualCamera>();
+            cameraFX.GetCinemachineComponent<Cinemachine.CinemachineBasicMultiChannelPerlin>().enabled = false;
             Debug.Log("Separation sequence 2 completed.");
+        }
     }
 
     IEnumerator LauchSequence()
@@ -132,7 +154,7 @@ public class RocketMovement : MonoBehaviour
 
     private void DetectHeight()
     {
-        if (_rgdbdy.position.y > maxHeight)
+        if (_rgdbdy.position.y >= maxHeight)
             maxHeight = _rgdbdy.position.y;
 
         if ((_rgdbdy.velocity.y <= 0) && (_rgdbdy.position.y > maxHeight))
@@ -142,13 +164,14 @@ public class RocketMovement : MonoBehaviour
         }
     }
 
-    //TODO: Abrir o paraquedas apenas quando estiver caindo
+    //TODO: Estabilizar descida do foguete com o paraquedas
     private void OpenParachute()
     {
         parachute.gameObject.SetActive(true);
         Invoke("AdjustDrag", 2.0f);
 
         StateManager.SetState(StateManager.gameState.LANDING);
+        StartCoroutine(StabilizeRocket());
     }
 
     private void AdjustDrag()
@@ -159,5 +182,19 @@ public class RocketMovement : MonoBehaviour
     public float GetMaxHeight()
     {
         return maxHeight;
+    }
+
+    private IEnumerator StabilizeRocket()
+    {
+        while (StateManager.GetState() == StateManager.gameState.LANDING)
+        {
+            Vector3 rotation = _rgdbdy.rotation.eulerAngles;
+            Vector3 pos = _rgdbdy.position;
+            rotation = new Vector3(Mathf.LerpAngle(rotation.x, 0, Time.deltaTime / 2), Mathf.LerpAngle(rotation.y, 0, Time.deltaTime / 2), Mathf.LerpAngle(rotation.z, 0, Time.deltaTime / 2));
+            _rgdbdy.rotation = Quaternion.Euler(rotation);
+            _rgdbdy.position = pos;
+            yield return null;
+        }
+        yield return null;
     }
 }

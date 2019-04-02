@@ -16,6 +16,8 @@ public class RocketMovement : MonoBehaviour
     public GameObject parachute;
     [Tooltip("How much air resistance the parachute will provide ?")]
     public float dragCoef = 10f;
+    public Animation openParachuteAnim;
+    public Animation closeParachuteAnim;
 
     [Header("Modules Config")]
     public GameObject firstStage;
@@ -24,6 +26,7 @@ public class RocketMovement : MonoBehaviour
     private float maxHeight;
     private Rigidbody _rgdbdy;  //Caching nos componentes para melhor performance.
     private ParticleSystem _particle;
+    private Animator _parachuteAmim;
 
     [Header("Private Vars")]
     [SerializeField]
@@ -168,10 +171,17 @@ public class RocketMovement : MonoBehaviour
     private void OpenParachute()
     {
         parachute.gameObject.SetActive(true);
+        //_parachuteAmim.Play(openParachuteAnim);
         Invoke("AdjustDrag", 2.0f);
 
         StateManager.SetState(StateManager.gameState.LANDING);
         StartCoroutine(StabilizeRocket());
+    }
+
+    private void CloseParachute()
+    {
+        StateManager.NextState();
+        parachute.GetComponent<Animation>().Play();
     }
 
     private void AdjustDrag()
@@ -196,5 +206,11 @@ public class RocketMovement : MonoBehaviour
             yield return null;
         }
         yield return null;
+    }
+
+    void OnCollisionEnter(Collision col)
+    {
+        if ((col.gameObject.tag == "Terrain") && (StateManager.GetState() == StateManager.gameState.LANDING))
+            Invoke("CloseParachute", 1.0f);
     }
 }

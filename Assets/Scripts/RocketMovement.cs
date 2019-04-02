@@ -25,6 +25,7 @@ public class RocketMovement : MonoBehaviour
     private Rigidbody _rgdbdy;  //Caching nos componentes para melhor performance.
     private ParticleSystem _particle;
     private Animator _parachuteAmim;
+    private AudioSource _audio;
     private Cinemachine.CinemachineVirtualCamera cameraFX;
     Cinemachine.CinemachineBasicMultiChannelPerlin perlin;
 
@@ -35,6 +36,7 @@ public class RocketMovement : MonoBehaviour
     void Awake()
     {
         _rgdbdy = GetComponent<Rigidbody>();
+        _audio = GetComponent<AudioSource>();
         maxHeight = transform.position.y;
         _particle = GetComponentInChildren<ParticleSystem>();
 
@@ -127,6 +129,7 @@ public class RocketMovement : MonoBehaviour
         else
         {
             ShakeCamera(false);
+            _audio.Stop();
             Debug.Log("Separation sequence 2 completed.");
         }
     }
@@ -151,6 +154,8 @@ public class RocketMovement : MonoBehaviour
         }
 
         StateManager.SetState(StateManager.gameState.START);
+
+        _audio.Play();
 
         ShakeCamera(true);
 

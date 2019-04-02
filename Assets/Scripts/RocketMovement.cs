@@ -21,6 +21,9 @@ public class RocketMovement : MonoBehaviour
     public GameObject firstStage;
     public GameObject secondStage;
 
+    [HideInInspector]
+    public string status;
+
     private float maxHeight;
     private Rigidbody _rgdbdy;  //Caching nos componentes para melhor performance.
     private ParticleSystem _particle;
@@ -69,7 +72,11 @@ public class RocketMovement : MonoBehaviour
 
             case StateManager.gameState.PARACHUTE:
                 if (_rgdbdy.velocity.y < 0)
+                {
                     parachute.OpenParachute(_rgdbdy, dragCoef);
+                    status = "Parachute deployed.";
+                }
+
                 break;
         }
     }
@@ -113,7 +120,7 @@ public class RocketMovement : MonoBehaviour
 
     private void SeparateModule(GameObject module)
     {
-        Debug.Log("Iniciating separating sequence.");
+        status = "Iniciating separating sequence.";
         module.transform.parent = null;
         Rigidbody module_rgdbdy = module.AddComponent<Rigidbody>();
         module_rgdbdy.velocity = _rgdbdy.velocity * 0.95f + new Vector3(Random.Range(-2, 2), Random.Range(-2, 0), Random.Range(-2, 2));
@@ -124,13 +131,13 @@ public class RocketMovement : MonoBehaviour
         if (module == firstStage)
         {
             StartCoroutine(Thrust(StateManager.gameState.STAGE2));
-            Debug.Log("Separation sequence 1 completed.");
+            status = "Separation sequence 1 completed.";
         }
         else
         {
             ShakeCamera(false);
             _audio.Stop();
-            Debug.Log("Separation sequence 2 completed.");
+            status = "Separation sequence 2 completed.";
         }
     }
 
@@ -138,20 +145,22 @@ public class RocketMovement : MonoBehaviour
     {
         if (debugText)
         {
-            Debug.Log("Systems starting...");
+            status = "Systems starting...";
             yield return new WaitForSeconds(1);
-            Debug.Log("Inializing protocols...");
+            status = "Inializing protocols...";
             yield return new WaitForSeconds(1);
-            Debug.Log("All modules ready.");
+            status = "All modules ready.";
             yield return new WaitForSeconds(1);
-            Debug.Log("Launching in: 3");
+            status = "Launching in: 3...";
             yield return new WaitForSeconds(1);
-            Debug.Log("2");
+            status = "Launching in: 2...";
             yield return new WaitForSeconds(1);
-            Debug.Log("1");
+            status = "Launching in: 1...";
             yield return new WaitForSeconds(1);
-            Debug.Log("Now.");
+            status = "Now.";
+            yield return new WaitForSeconds(1);
         }
+        status = "Launched.";
 
         StateManager.SetState(StateManager.gameState.START);
 
@@ -170,7 +179,7 @@ public class RocketMovement : MonoBehaviour
         if ((_rgdbdy.velocity.y <= 0) && (_rgdbdy.position.y > maxHeight))
         {
             maxHeight = _rgdbdy.position.y;
-            Debug.Log("Maximum height detected: " + maxHeight);
+            status = "Maximum height detected.";
         }
     }
 
@@ -182,7 +191,10 @@ public class RocketMovement : MonoBehaviour
     void OnCollisionEnter(Collision col)
     {
         if ((col.gameObject.tag == "Terrain") && (StateManager.GetState() == StateManager.gameState.LANDING))
+        {
             parachute.CloseParachute();
+            status = "Safely landed.";
+        }
     }
 
     private void ShakeCamera(bool state)

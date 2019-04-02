@@ -39,7 +39,6 @@ public class ParachuteController : MonoBehaviour
             rotation = new Vector3(Mathf.LerpAngle(rotation.x, 0, Time.deltaTime / 2), Mathf.LerpAngle(rotation.y, 0, Time.deltaTime / 2), Mathf.LerpAngle(rotation.z, 0, Time.deltaTime / 2));
             rocket.rotation = Quaternion.Euler(rotation);
             rocket.position = pos;
-            print("hey");
             yield return null;
         }
         rocket.drag = 0;

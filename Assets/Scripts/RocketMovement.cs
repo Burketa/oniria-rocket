@@ -13,7 +13,7 @@ public class RocketMovement : MonoBehaviour
     public float timerMax = 5f;
 
     [Header("Parachute Config")]
-    public GameObject parachute;
+    public ParachuteController parachute;
     [Tooltip("How much air resistance the parachute will provide ?")]
     public float dragCoef = 10f;
 
@@ -21,9 +21,16 @@ public class RocketMovement : MonoBehaviour
     public GameObject firstStage;
     public GameObject secondStage;
 
+    [HideInInspector]
+    public string status;
+
     private float maxHeight;
     private Rigidbody _rgdbdy;  //Caching nos componentes para melhor performance.
     private ParticleSystem _particle;
+    private Animator _parachuteAmim;
+    private AudioSource _audio;
+    private Cinemachine.CinemachineVirtualCamera cameraFX;
+    Cinemachine.CinemachineBasicMultiChannelPerlin perlin;
 
     [Header("Private Vars")]
     [SerializeField]
@@ -32,8 +39,14 @@ public class RocketMovement : MonoBehaviour
     void Awake()
     {
         _rgdbdy = GetComponent<Rigidbody>();
+        _audio = GetComponent<AudioSource>();
         maxHeight = transform.position.y;
         _particle = GetComponentInChildren<ParticleSystem>();
+
+        cameraFX = GameObject.FindObjectOfType<Cinemachine.CinemachineVirtualCamera>();
+        perlin = cameraFX.GetCinemachineComponent<Cinemachine.CinemachineBasicMultiChannelPerlin>();
+
+        ShakeCamera(false);
     }
 
     void Start()
@@ -59,7 +72,11 @@ public class RocketMovement : MonoBehaviour
 
             case StateManager.gameState.PARACHUTE:
                 if (_rgdbdy.velocity.y < 0)
-                    OpenParachute();
+                {
+                    parachute.OpenParachute(_rgdbdy, dragCoef);
+                    status = "Parachute deployed.";
+                }
+
                 break;
         }
     }
@@ -90,7 +107,6 @@ public class RocketMovement : MonoBehaviour
         while (timerCurrent < timerMax)
         {
             _rgdbdy.AddForce(transform.up * speed * Time.deltaTime);
-            //speed += speed / 1000;
             timerCurrent += Time.deltaTime;
             yield return null;
         }
@@ -104,27 +120,24 @@ public class RocketMovement : MonoBehaviour
 
     private void SeparateModule(GameObject module)
     {
-        Debug.Log("Iniciating separating sequence.");
+        status = "Iniciating separating sequence.";
         module.transform.parent = null;
         Rigidbody module_rgdbdy = module.AddComponent<Rigidbody>();
-        //Rigidbody module_rgdbdy = module.GetComponent<Rigidbody>();
         module_rgdbdy.velocity = _rgdbdy.velocity * 0.95f + new Vector3(Random.Range(-2, 2), Random.Range(-2, 0), Random.Range(-2, 2));
         module_rgdbdy.drag = _rgdbdy.drag;
-        //module_rgdbdy.mass = _rgdbdy.mass / 3;
-        //_rgdbdy.mass /= 3;
 
         StateManager.NextState();
 
         if (module == firstStage)
         {
             StartCoroutine(Thrust(StateManager.gameState.STAGE2));
-            Debug.Log("Separation sequence 1 completed.");
+            status = "Separation sequence 1 completed.";
         }
         else
         {
-            Cinemachine.CinemachineVirtualCamera cameraFX = GameObject.FindObjectOfType<Cinemachine.CinemachineVirtualCamera>();
-            cameraFX.GetCinemachineComponent<Cinemachine.CinemachineBasicMultiChannelPerlin>().enabled = false;
-            Debug.Log("Separation sequence 2 completed.");
+            ShakeCamera(false);
+            _audio.Stop();
+            status = "Separation sequence 2 completed.";
         }
     }
 
@@ -132,22 +145,28 @@ public class RocketMovement : MonoBehaviour
     {
         if (debugText)
         {
-            Debug.Log("Systems starting...");
+            status = "Systems starting...";
             yield return new WaitForSeconds(1);
-            Debug.Log("Inializing protocols...");
+            status = "Inializing protocols...";
             yield return new WaitForSeconds(1);
-            Debug.Log("All modules ready.");
+            status = "All modules ready.";
             yield return new WaitForSeconds(1);
-            Debug.Log("Launching in: 3");
+            status = "Launching in: 3...";
             yield return new WaitForSeconds(1);
-            Debug.Log("2");
+            status = "Launching in: 2...";
             yield return new WaitForSeconds(1);
-            Debug.Log("1");
+            status = "Launching in: 1...";
             yield return new WaitForSeconds(1);
-            Debug.Log("Now.");
+            status = "Now.";
+            yield return new WaitForSeconds(1);
         }
+        status = "Launched.";
 
         StateManager.SetState(StateManager.gameState.START);
+
+        _audio.Play();
+
+        ShakeCamera(true);
 
         yield return null;
     }
@@ -160,23 +179,8 @@ public class RocketMovement : MonoBehaviour
         if ((_rgdbdy.velocity.y <= 0) && (_rgdbdy.position.y > maxHeight))
         {
             maxHeight = _rgdbdy.position.y;
-            Debug.Log("Maximum height detected: " + maxHeight);
+            status = "Maximum height detected.";
         }
-    }
-
-    //TODO: Estabilizar descida do foguete com o paraquedas
-    private void OpenParachute()
-    {
-        parachute.gameObject.SetActive(true);
-        Invoke("AdjustDrag", 2.0f);
-
-        StateManager.SetState(StateManager.gameState.LANDING);
-        StartCoroutine(StabilizeRocket());
-    }
-
-    private void AdjustDrag()
-    {
-        _rgdbdy.drag = dragCoef;
     }
 
     public float GetMaxHeight()
@@ -184,17 +188,20 @@ public class RocketMovement : MonoBehaviour
         return maxHeight;
     }
 
-    private IEnumerator StabilizeRocket()
+    void OnCollisionEnter(Collision col)
     {
-        while (StateManager.GetState() == StateManager.gameState.LANDING)
+        if ((col.gameObject.tag == "Terrain") && (StateManager.GetState() == StateManager.gameState.LANDING))
         {
-            Vector3 rotation = _rgdbdy.rotation.eulerAngles;
-            Vector3 pos = _rgdbdy.position;
-            rotation = new Vector3(Mathf.LerpAngle(rotation.x, 0, Time.deltaTime / 2), Mathf.LerpAngle(rotation.y, 0, Time.deltaTime / 2), Mathf.LerpAngle(rotation.z, 0, Time.deltaTime / 2));
-            _rgdbdy.rotation = Quaternion.Euler(rotation);
-            _rgdbdy.position = pos;
-            yield return null;
+            parachute.CloseParachute();
+            status = "Safely landed.";
         }
-        yield return null;
+    }
+
+    private void ShakeCamera(bool state)
+    {
+        if (state)
+            perlin.enabled = true;
+        else
+            perlin.enabled = false;
     }
 }
